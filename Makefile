@@ -1,14 +1,15 @@
-PREFIX ?= $(HOME)/.local
-DATA_DIR = $(PREFIX)/share/orange
-BIN_DIR = $(PREFIX)/bin
-
 install:
-	mkdir -p $(BIN_DIR)
-	install -Dm 755 orange_ma.py $(DATA_DIR)/orange.py
-	ln -sf $(abspath $(DATA_DIR)/orange.py) $(BIN_DIR)/orange
+	$(MAKE) -C orange install
+	$(MAKE) -C win install
 
 uninstall:
-	rm -f $(BIN_DIR)/orange
-	rm -rf $(DATA_DIR)
+	$(MAKE) -C orange uninstall
+	$(MAKE) -C win uninstall
 
-.PHONY: install uninstall
+install-orange:
+	$(MAKE) -C orange install
+
+install-win:
+	$(MAKE) -C win install
+
+.PHONY: install uninstall install-orange install-win

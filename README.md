@@ -1,44 +1,41 @@
-# Orange Maroc CLI
+# Telecom Usage
 
-Minimal, dependency-free CLI for viewing Orange Maroc plan allowances and
-additional top-up balances through the Max it mobile API.
+Dependency-free CLIs for monitoring Moroccan mobile plan allowances:
 
-## Usage
+- `orange`: Orange Maroc plans through the Max it API
+- `win`: win by inwi plans through the My win API
 
-Install the `orange` command under `~/.local/bin`:
+## Install
+
+Install both commands under `~/.local/bin`:
 
 ```console
 make install
 ```
 
+Install or remove one provider independently:
+
 ```console
-orange
-orange plan
-orange topups
-orange --json
-orange plan --json
-orange login
-orange logout
+make install-orange
+make install-win
+make uninstall
 ```
 
-Use another credentials file with `--config path/to/config.toml`.
+Each CLI has its own commands and authentication state:
 
-On the first run, `orange` asks for the account email and password, verifies
-them, and stores them in `~/.local/share/orange/config.toml` with permissions
-`600`. `orange login` replaces the saved login after confirmation, while
-`orange logout` confirms and clears it. If saved credentials are rejected,
-balance commands offer to start the login flow again.
+```console
+orange
+orange --json
+win
+win --json
+```
 
-The config is created on demand after a successful login. Reinstalling or
-upgrading does not overwrite a saved login.
+Provider credentials and tokens remain outside Git and are stored separately:
 
-Remove the installed command and data with `make uninstall`.
+```text
+~/.local/share/orange/
+~/.local/share/inwi-win/
+```
 
-For plans whose name contains the subscription quota, such as `YOXO 60GO`, the
-human-readable output includes a remaining-data progress bar. It also compares
-usage with the expected linear pace from the first day of the current month at
-midnight in Morocco through the first day of the next month. Pace is hidden for
-the first 3% of a cycle, matching CodexBar's warm-up behavior. Additional
-top-up data remains separate from the subscription meter.
-
-JSON output preserves the unmodified balance fields returned by Orange.
+See [`orange/README.md`](orange/README.md) and [`win/README.md`](win/README.md)
+for provider-specific details.

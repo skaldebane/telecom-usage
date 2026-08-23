@@ -4,17 +4,22 @@ import base64
 import getpass
 import json
 import os
+import re
 import sys
 import tempfile
 import tomllib
 import urllib.error
 import urllib.request
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 
 BASE_URL = "https://maxit.orange.ma"
 API_VERSION = "v10.9"
 DEFAULT_CONFIG = Path(__file__).resolve().with_name("config.toml")
+MOROCCO_TIMEZONE = ZoneInfo("Africa/Casablanca")
+PROGRESS_WIDTH = 20
 
 
 class CliError(Exception):
@@ -206,7 +211,115 @@ def item_text(item):
         text = f"{text or 'Usage'} (used {consumed} of {initial})"
     elif gauge.get("consumedPercentage"):
         text = f"{text or 'Usage'} ({gauge['consumedPercentage']} used)"
-    return text or "Unavailable"
+    return humanize_text(text or "Unavailable")
+
+
+def humanize_text(text):
+    return re.sub(r"\bIllimit(?:e|é)s?\b", "Unlimited", str(text), flags=re.IGNORECASE)
+
+
+def subscription_total_gb(plan_name):
+    match = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:GO|GB)\b", plan_name or "", re.IGNORECASE)
+    return float(match.group(1).replace(",", ".")) if match else None
+
+
+def item_data_gb(item):
+    factors = {"GO": 1, "GB": 1, "MO": 1 / 1024, "MB": 1 / 1024}
+    for value in item.get("valueItems") or []:
+        unit = str(value.get("unit") or "").upper()
+        if unit in factors:
+            try:
+                return float(str(value["value"]).replace(",", ".")) * factors[unit]
+            except (KeyError, ValueError):
+                return None
+
+    match = re.search(r"(\d+(?:[.,]\d+)?)\s*(GO|GB|MO|MB)\b", item.get("rawValue") or "", re.IGNORECASE)
+    if not match:
+        return None
+    return float(match.group(1).replace(",", ".")) * factors[match.group(2).upper()]
+
+
+def monthly_pace(total_gb, remaining_gb, observed_at):
+    if not observed_at:
+        return None
+    observed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+    if observed.tzinfo is None:
+        observed = observed.replace(tzinfo=MOROCCO_TIMEZONE)
+    else:
+        observed = observed.astimezone(MOROCCO_TIMEZONE)
+
+    start = observed.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if start.month == 12:
+        end = start.replace(year=start.year + 1, month=1)
+    else:
+        end = start.replace(month=start.month + 1)
+
+    elapsed = observed.timestamp() - start.timestamp()
+    duration = end.timestamp() - start.timestamp()
+    expected = max(0, min(100, elapsed / duration * 100))
+    actual = max(0, min(100, (total_gb - remaining_gb) / total_gb * 100))
+    return actual - expected, expected
+
+
+def format_number(value):
+    return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
+def format_updated_at(value):
+    try:
+        updated_at = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=MOROCCO_TIMEZONE)
+        return updated_at.astimezone().strftime("%Y-%m-%d %-I:%M %p")
+    except (AttributeError, ValueError):
+        return str(value)
+
+
+def internet_lines(item, total_gb, observed_at):
+    remaining_gb = item_data_gb(item)
+    if remaining_gb is None or not total_gb:
+        return [f"Internet: {item_text(item)}"]
+
+    used_gb = max(0, total_gb - remaining_gb)
+    used_percent = max(0, min(100, used_gb / total_gb * 100))
+    filled = round(used_percent / 100 * PROGRESS_WIDTH)
+    bar = "█" * filled + "░" * (PROGRESS_WIDTH - filled)
+    lines = [
+        f"  Internet: [{bar}] {used_percent:.1f}% used "
+        f"({format_number(used_gb)} / {format_number(total_gb)} GB)"
+    ]
+
+    pace = monthly_pace(total_gb, remaining_gb, observed_at)
+    if pace is not None:
+        delta, expected = pace
+        if expected >= 3:
+            if abs(delta) <= 2:
+                description = "On pace"
+            elif delta > 0:
+                difference_gb = total_gb * abs(delta) / 100
+                description = (
+                    f"{int(abs(delta) + 0.5)}% in deficit ({format_number(difference_gb)} GB)"
+                )
+            else:
+                difference_gb = total_gb * abs(delta) / 100
+                description = (
+                    f"{int(abs(delta) + 0.5)}% in reserve ({format_number(difference_gb)} GB)"
+                )
+            expected_gb = total_gb * expected / 100
+            lines.append(
+                f"  Pace: {description} - {int(expected + 0.5)}% expected "
+                f"({format_number(expected_gb)} GB)"
+            )
+    return lines
+
+
+def item_label(item):
+    units = {str(value.get("unit") or "").upper() for value in item.get("valueItems") or []}
+    if units & {"H", "MIN", "S"}:
+        return "Calls"
+    if "SMS" in (item.get("message") or "").upper():
+        return "SMS"
+    return "Balance"
 
 
 def render_human(balance, command):
@@ -220,26 +333,41 @@ def render_human(balance, command):
             lines.append("")
         lines.append("Plan")
         items = balance.get("items", [])
-        lines.extend(f"  {item_text(item)}" for item in items)
+        internet_item = next((item for item in items if item_data_gb(item) is not None), None)
+        if internet_item:
+            lines.extend(
+                internet_lines(
+                    internet_item,
+                    subscription_total_gb(tariff_plan),
+                    balance.get("balanceAt"),
+                )
+            )
+            if len(items) > 1:
+                lines.append("")
+        for item in items:
+            if item is internet_item:
+                continue
+            value = humanize_text(item.get("rawValue")) if item.get("rawValue") else item_text(item)
+            lines.append(f"  {item_label(item)}: {value}")
         if not items:
             lines.append("  No plan balances.")
 
     if command in ("all", "topups"):
         if lines:
             lines.append("")
-        lines.append("Top-ups")
+        lines.append("Top-ups:")
         categories = balance.get("categories", [])
         if not categories:
             lines.append("  No top-up balances.")
         for category in categories:
-            lines.append(f"  {category.get('name') or 'Additional balance'}")
+            lines.append(f"  {humanize_text(category.get('name') or 'Additional balance')}")
             items = category.get("items", [])
             lines.extend(f"    {item_text(item)}" for item in items)
             if not items:
                 lines.append("    No balances.")
 
     if balance.get("balanceAt"):
-        lines.extend(("", f"Updated: {balance['balanceAt']}"))
+        lines.extend(("", f"Updated: {format_updated_at(balance['balanceAt'])}"))
     return "\n".join(lines)
 
 

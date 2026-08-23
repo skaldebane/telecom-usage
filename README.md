@@ -34,7 +34,11 @@ upgrading does not overwrite a saved login.
 
 Remove the installed command and data with `make uninstall`.
 
-The API always reports remaining allowances. It can optionally provide initial
-and consumed values in each item's `gauge`, and JSON output preserves those
-fields. Orange currently returns `gauge: null` for Yoxo balances on the tested
-account, so consumed and total values cannot be calculated reliably.
+For plans whose name contains the subscription quota, such as `YOXO 60GO`, the
+human-readable output includes a remaining-data progress bar. It also compares
+usage with the expected linear pace from the first day of the current month at
+midnight in Morocco through the first day of the next month. Pace is hidden for
+the first 3% of a cycle, matching CodexBar's warm-up behavior. Additional
+top-up data remains separate from the subscription meter.
+
+JSON output preserves the unmodified balance fields returned by Orange.

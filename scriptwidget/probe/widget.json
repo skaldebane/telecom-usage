@@ -1,0 +1,12 @@
+{
+  "entry": "main.jsx",
+  "formatVersion": 2,
+  "id": "ma.telecom-usage.runtime-probe",
+  "name": "Telecom Runtime Probe",
+  "networkDomains": ["httpbingo.org"],
+  "permissions": ["network", "storage"],
+  "plugins": [],
+  "runtimeVersion": "1.0",
+  "supportedFamilies": ["systemMedium", "systemLarge"],
+  "version": "1.0.0"
+}

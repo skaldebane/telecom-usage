@@ -3,3 +3,4 @@
 **/*.auth-state.json
 **/__pycache__/
 **/*.pyc
+/dist/

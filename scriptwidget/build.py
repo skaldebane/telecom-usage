@@ -53,7 +53,7 @@ def main():
         manifest = {"entry": "main.jsx", "formatVersion": 2, "id": "ma.telecom-usage." + provider,
                     "name": name, "networkDomains": [host], "permissions": ["network", "storage"],
                     "plugins": [], "runtimeVersion": "1.0", "supportedFamilies": ["systemSmall", "systemMedium", "systemLarge"],
-                    "version": "1.2.2"}
+                    "version": "1.2.3"}
         stem = provider + "-usage"
         (args.output / (stem + ".jsx")).write_text(source)
         with ZipFile(args.output / (stem + ".swt"), "w", ZIP_DEFLATED) as archive:

@@ -44,7 +44,7 @@ for (const provider of ['orange', 'win']) {
       if (variant.ready) values.set('telecom-' + provider + '-v1', JSON.stringify({
         identity: provider === 'orange' ? ':null' : ':',
         credentials: { email: 'mock@example.invalid', password: 'not-real' },
-        snapshot: { orangeDataVersion: 2, total: 60, used: 32.4, remaining: 27.6, observedAt: now - (variant.stale ? 7200000 : 1000), fetchedAt: now,
+        snapshot: { orangeDataVersion: 2, winDataVersion: 2, total: 60, used: 32.4, remaining: 27.6, observedAt: now - (variant.stale ? 7200000 : 1000), fetchedAt: now,
           plan: 'Synthetic plan', cycle: { start: now - 20 * 864e5, end: now + 10 * 864e5, estimated: provider === 'orange' },
           pace: { status: 'reserve', difference: 7.6, fraction: 0.667, expected: 40 }, calls: '2 h', sms: 'Unlimited' },
         passes: { items: [{ name: 'Synthetic top-up', gb: 2 }], at: now, fetchedAt: now },

@@ -340,6 +340,8 @@ def pace_line(total_gb, used_gb, cycle_start, cycle_end, observed_at=None):
     observed = observed_at or datetime.now(timezone.utc)
     if not start or not end or end <= start or total_gb <= 0:
         return None
+    if observed < start or observed >= end:
+        return None
     elapsed = max(0, min((observed - start).total_seconds(), (end - start).total_seconds()))
     expected = elapsed / (end - start).total_seconds() * 100
     actual = max(0, min(100, used_gb / total_gb * 100))
@@ -360,7 +362,7 @@ def pace_line(total_gb, used_gb, cycle_start, cycle_end, observed_at=None):
     return f"  Pace: {status} - {int(expected + 0.5)}% expected ({format_number(expected_gb)} GB)"
 
 
-def internet_lines(asset):
+def internet_lines(asset, offer_asset=None, observed_at=None):
     balance = asset.get("balance") or {}
     total_gb = balance_amount(balance, "defaultValue", "defaultUnitValue")
     consumed_gb = balance_amount(balance, "consumedValue", "consumedUnit")
@@ -377,7 +379,10 @@ def internet_lines(asset):
         f"  Internet: [{bar}] {used_percent:.1f}% used "
         f"({format_number(consumed_gb)} / {format_number(total_gb)} GB)"
     ]
-    pace = pace_line(total_gb, consumed_gb, asset.get("dateCycleStart"), asset.get("dateCycleEnd"))
+    # Internet balances may keep last cycle's dates after renewal. Billing
+    # dates belong to the plan's OFFER asset, not its individual balances.
+    cycle = offer_asset or {}
+    pace = pace_line(total_gb, consumed_gb, cycle.get("dateCycleStart"), cycle.get("dateCycleEnd"), observed_at)
     if pace:
         lines.append(pace)
     return lines
@@ -427,7 +432,7 @@ def render_human(data, command="all"):
         lines.extend(("", "Plan"))
         plan_lines = []
         if internet:
-            plan_lines.extend(internet_lines(internet))
+            plan_lines.extend(internet_lines(internet, offer_asset))
 
         calls_line = None
         sms_line = None

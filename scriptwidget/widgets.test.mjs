@@ -19,7 +19,7 @@ const orangeBalance = () => ({ tariffPlan: 'YOXO 60GO', balanceAt: '2026-10-21T0
   { message: '120 SMS' },
 ], categories: [{ name: 'Internet top-up', items: [{ rawValue: '2048 MO' }] }] });
 const offer = () => ({ assets: [
-  { type: 'OFFER', name: 'win 50 GO' },
+  { type: 'OFFER', name: 'win 50 GO', dateCycleStart: '2026-10-01T00:00:00Z', dateCycleEnd: '2026-11-01T00:00:00Z' },
   { name: 'Internet', dateCycleStart: '2026-10-01T00:00:00Z', dateCycleEnd: '2026-11-01T00:00:00Z', balance: {
     defaultValue: 50, defaultUnitValue: 'GIGABYTES', consumedValue: 42000, consumedUnit: 'MEGABYTES', restValue: 8000000000, restUnit: 'BYTES',
   } },
@@ -209,6 +209,43 @@ test('win decimal data conversion, cycle, calls and unlimited SMS', () => {
   assert.equal(s.calls, '1 h 40 min'); assert.equal(s.sms, 'Unlimited');
   assert.equal(s.pace.status, 'deficit'); assert.equal(s.cycle.estimated, false);
   assert.equal(T.winPasses(passes())[0].gb, 5);
+});
+test('win renewal uses current OFFER dates, not previous Internet balance dates', () => {
+  const at = Date.parse('2026-10-28T09:28:00Z');
+  const data = offer();
+  Object.assign(data.assets[0], { dateCycleStart: '2026-10-27T04:05:46.000+0000', dateCycleEnd: '2026-11-27T04:05:46.000+0000' });
+  Object.assign(data.assets[1], {
+    dateCycleStart: '2026-09-27T04:04:32.000+0000', dateCycleEnd: '2026-10-27T04:05:46.000+0000',
+    dateCycleFutureStart: '2026-10-27T04:05:46.000+0000', dateCycleFutureEnd: '2026-11-27T04:05:46.000+0000',
+  });
+  const snapshot = T.win(data, {}, at);
+  assert.equal(snapshot.cycle.start, Date.parse(data.assets[0].dateCycleStart));
+  assert.equal(snapshot.cycle.end, Date.parse(data.assets[0].dateCycleEnd));
+  assert.equal(Math.floor((snapshot.cycle.end - at) / 86400000), 29);
+  assert.equal(snapshot.used, 42); assert.equal(snapshot.remaining, 8);
+  assert.equal(snapshot.pace.status, 'deficit');
+  const v = T.view('win', {}, { snapshot }, at);
+  assert.equal(v.notice, ''); assert.equal(v.renewal, '27 Nov'); assert.ok(v.pace);
+});
+test('win never guesses cycle dates from balances, future periods or expiry when OFFER is missing/invalid', () => {
+  const data = offer();
+  data.assets[1].balance.expireDate = '2026-12-01T00:00:00Z';
+  delete data.assets[0].dateCycleStart;
+  assert.equal(T.win(data, {}, now).cycle, null);
+  data.assets.shift();
+  const snapshot = T.win(data, {}, now);
+  assert.equal(snapshot.cycle, null); assert.equal(snapshot.pace, null);
+  assert.equal(snapshot.remaining, 8);
+});
+test('old win cycle normalization is refreshed once without clearing credentials or rediscovering its line', async () => {
+  const h = harness(); await h.ready();
+  const state = h.read(); delete state.snapshot.winDataVersion;
+  state.snapshot.cycle.end = now - 1000; h.write(state);
+  const count = h.calls.length;
+  const r = await h.run();
+  assert.equal(h.calls.length, count + 1); assert.match(h.calls.at(-1).url, /\/offer-detail$/);
+  assert.equal(r.snapshot.winDataVersion, 2); assert.ok(r.snapshot.cycle.end > now);
+  assert.equal(h.read().credentials.password, 'fake-only');
 });
 test('missing win values are not turned into zero; missing usage can be derived', () => {
   const a = offer(); delete a.assets[1].balance.consumedValue;
@@ -422,8 +459,8 @@ test('unknown top-up balance is unavailable, not zero; a successful empty result
 });
 test('a fresh win balance with an ended cycle is not called stale and has no pace', () => {
   const data = offer();
-  data.assets[1].dateCycleStart = '2026-09-20T00:00:00Z';
-  data.assets[1].dateCycleEnd = '2026-10-20T00:00:00Z';
+  data.assets[0].dateCycleStart = '2026-09-20T00:00:00Z';
+  data.assets[0].dateCycleEnd = '2026-10-20T00:00:00Z';
   data.assets[1].balance.expireDate = '2026-11-20T00:00:00Z';
   const snapshot = T.win(data, {}, now);
   assert.equal(snapshot.pace, null);

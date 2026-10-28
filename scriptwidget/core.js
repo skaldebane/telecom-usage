@@ -197,8 +197,11 @@ const Telecom = (() => {
     let remaining = winAmount(b, "restValue", "restUnit");
     if (used == null && total != null && remaining != null) used = Math.max(0, total - remaining);
     if (remaining == null && total != null && used != null) remaining = Math.max(0, total - used);
-    const start = internet ? timestamp(internet.dateCycleStart, false) : null;
-    const end = internet ? timestamp(internet.dateCycleEnd, false) : null;
+    // Balance assets can retain the previous cycle after renewal. The plan's
+    // OFFER asset carries the actual billing cycle (as shown by win's app).
+    const offerAsset = assets.find(a => a.type === "OFFER");
+    const start = offerAsset ? timestamp(offerAsset.dateCycleStart, false) : null;
+    const end = offerAsset ? timestamp(offerAsset.dateCycleEnd, false) : null;
     const cycle = start != null && end > start ? { start: start, end: end, estimated: false } : null;
     let calls = null, sms = null;
     for (const asset of assets) {
@@ -210,8 +213,7 @@ const Telecom = (() => {
         calls = balance.unlimited ? "Unlimited" : duration(seconds);
       }
     }
-    const offerAsset = assets.find(a => a.type === "OFFER");
-    return { provider: "win", plan: String(offerAsset && offerAsset.name || "win"), total: total,
+    return { provider: "win", winDataVersion: 2, plan: String(offerAsset && offerAsset.name || "win"), total: total,
       used: used, remaining: remaining, observedAt: now, fetchedAt: now, cycle: cycle,
       pace: pace(total, used, cycle, now), calls: calls, sms: sms };
   }
@@ -313,9 +315,10 @@ const Telecom = (() => {
       save();
     }
     const topups = needsTopups(c, s.snapshot, family);
-    // Old Orange snapshots may contain a false empty top-up list from the
-    // message-only pass parsing bug. Refetch without discarding credentials.
-    const fresh = s.snapshot && (provider !== "orange" || s.snapshot.orangeDataVersion === 2)
+    // Refetch snapshots normalized by old parsers without discarding auth:
+    // Orange's message-only passes and win's balance-asset cycle were wrong.
+    const currentParser = s.snapshot && (provider === "orange" ? s.snapshot.orangeDataVersion === 2 : s.snapshot.winDataVersion === 2);
+    const fresh = currentParser
       && started >= s.snapshot.fetchedAt && started - s.snapshot.fetchedAt < c.minimumFetchIntervalMinutes * 60000;
     const passesFresh = !topups || provider === "orange" || s.passes && !s.passes.error && s.passes.items != null
       && started - s.passes.fetchedAt < c.minimumFetchIntervalMinutes * 60000;

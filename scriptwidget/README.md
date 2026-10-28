@@ -167,8 +167,12 @@ a recent plan. A failed/deferred request shows cached passes marked stale, or
   data handles offset changes (including Ramadan), independently of the phone's
   locale or optional `Intl` support. Rebuild for updated timezone rules. The
   bundled table covers 2020–2040; outside it Orange cycle/pace are unavailable.
-- win uses the exact returned cycle instants, shown as UTC calendar dates. win
-  data units match the CLI's decimal conversions; Orange MB uses its CLI's /1024.
+- win uses the plan's `OFFER` asset cycle instants, shown as UTC calendar dates.
+  Internet-balance assets can retain the previous period after renewal; their
+  current/future cycle fields and balance expiry are not authoritative plan dates.
+  Old normalized win snapshots are refetched after this fix without discarding
+  saved credentials or line selection. Missing plan dates leave pace unavailable.
+  win data units match the CLI's decimal conversions; Orange MB uses its CLI's /1024.
 - Missing values are unavailable, not zero. Top-ups never inflate plan quota.
   Orange non-data top-ups are not included in the GB total.
 - On a caught failure, retain the snapshot and original observation timestamp,
@@ -208,6 +212,7 @@ From the repository root (Python 3 with system IANA tzdata, and Node for tests):
 
 ```sh
 node --test scriptwidget/widgets.test.mjs scriptwidget/probe/probe.test.mjs
+python3 -m unittest discover -s win -p 'test_*.py'
 python3 scriptwidget/build.py
 ```
 
